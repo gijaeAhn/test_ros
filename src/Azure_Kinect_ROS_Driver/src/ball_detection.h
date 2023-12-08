@@ -1,5 +1,5 @@
 //
-// Created by sj on 23. 12. 6.
+// Created by gj on 23. 12. 6.
 //
 
 #ifndef BALL_PARAMS_H
@@ -12,6 +12,7 @@
 #include <deque>
 #include <queue>
 #include <string>
+#include <iostream>
 
 #include <opencv4/opencv2/opencv.hpp>
 #include <opencv4/opencv2/imgproc/imgproc.hpp>
@@ -39,7 +40,7 @@ typedef std::vector<Contour> Contours;
 #define DEBUG_BAD   2 // Red
 #define DEBUG_NONE  3 // Purple
 
-namespace ball_detection {
+
 
 
     //ROS PARAMS
@@ -62,7 +63,8 @@ namespace ball_detection {
     //BUFFER
 
     int max_history = 20;
-    std::vector<k4a::image> k4a_img_buffer(max_history);
+    std::deque<k4a::image> k4a_rgb_buffer(max_history);
+    std::deque<k4a::image> k4a_depth_buffer(max_history);
     std::deque<cv::Mat> img_buffer;
 
     // Global
@@ -71,7 +73,7 @@ namespace ball_detection {
     sensor_msgs::CameraInfoPtr info_msg_;
 
 // Constant
-    double fx, fy, cx, cy, base_line;
+    static double fx, fy, cx, cy, base_line;
     cv::Ptr<cv::BackgroundSubtractorMOG2> pBackSub_, pBackSub_left_, pBackSub_right_;
     std::vector<double> covariance;
 
@@ -83,33 +85,47 @@ namespace ball_detection {
 
 
 
-    cv::Mat k2cvMat(const k4a_image_t& input);
+    cv::Mat k2cvMat(const k4a::image& input);
 
     ros::Time kTime2Ros(uint64_t time);
 
-    void fillCamInfo(k4a_calibration_t);
+    void fillCamInfo(k4a::calibration);
 
-    double getDepth(double left, double right);
+    double getDepth(int x, int y);
 
-    geometry_msgs::Point getCartesianCoord(double x, double y);
+
+
+    geometry_msgs::Point getCartesianCoord(int x,int y,uint8_t depth);
 
     geometry_msgs::PoseWithCovarianceStamped createEstimateMsg(const geometry_msgs::Point& position, const ros::Time& time_taken);
-    void singalHandler(int signum);
 
-    void image_buffer_bookkeeping(const cv::Mat& frame);
+    void signalHandler(int signum);
+
+    void cv_buffer_bookkeeping(const cv::Mat& frame);
+
+    void rgb_buffer_bookkeeping(const k4a::image& frame);
+
+    void depth_buffer_bookkeeping(const k4a::image& frame);
+
+    geometry_msgs::PoseWithCovarianceStamped createEstimateMsg(const geometry_msgs::Point& position , ros::Time& taken_time);
+
 
     roi_list findMovingCandidates(const cv::Mat& frame);
 
-    void searchCandidates(const cv::Mat& frame, roi_list& ROIs, cv::Rect ball_ROI);
+    void searchCandidates(const cv::Mat& frame, roi_list& ROIs, cv::Rect& ball_ROI);
 
-    void findCandidateCenter(const cv::Mat& frame, cv::Rect ball_ROI, cv::Point2f center);
+    void findCandidateCenter(const cv::Mat& frame, cv::Rect& ball_ROI, cv::Point2i& center);
 
-    void publishCenter(point_pair& centers, ros::Time& time_taken);
+    void publishCenter(cv::Point2i& center, ros::Time& time_taken, k4a::image& depth_image);
 
-    void publishDebug(const cv::Mat& frame,roi_list& ROIs, roi_pair& ball_ROIs, point_pair& centers, ros::Time time);
+    void publishDebug(const cv::Mat& frame,roi_list& ROIs, cv::Rect& ball_ROI, cv::Point2i center, ros::Time time);
 
     void detectBall(int image_idx);
-}
+
+    k4a_result_t getDepthImage(const k4a::capture& capture, k4a::image& return_depth_image);
+
+    k4a_result_t getRGBImage(const k4a::capture& capture, k4a::image& return_RGB_image);
+
 
 
 

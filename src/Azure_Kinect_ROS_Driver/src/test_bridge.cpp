@@ -1,5 +1,5 @@
 //
-// Created by sj on 23. 12. 6.
+// Created by gj on 23. 12. 6.
 //
 #include <ros/ros.h>
 #include <image_transport/image_transport.h>

@@ -62,11 +62,13 @@ add_executable(${PROJECT_NAME}_node
   src/k4a_calibration_transform_data.cpp
 
   )
-
-add_executable(test_bridge src/test_bridge.cpp)
-#add_executable(ball_detection src/ball_detection.cpp)
-target_link_libraries(test_bridge ${catkin_LIBRARIES})
-#target_link_libraries(ball_detection ${catkin_LIBRARIES})
+add_library(ball_detection src/shelf-pack.hpp
+        src/ball_detection.cpp
+        src/ball_detection.h
+        ${catkin_LIBRARIES})
+#add_executable(test_bridge src/test_bridge.cpp)
+add_executable(test_detect src/test_detection.cpp)
+#target_link_libraries(test_bridge ${catkin_LIBRARIES})
 target_compile_features(${PROJECT_NAME}_node PUBLIC cxx_std_11)
 
 add_library(${PROJECT_NAME}_nodelet
@@ -75,6 +77,8 @@ add_library(${PROJECT_NAME}_nodelet
   src/k4a_ros_device_params.cpp
   src/k4a_calibration_transform_data.cpp
   )
+
+
 
 target_compile_features(${PROJECT_NAME}_nodelet PUBLIC cxx_std_11)
 
@@ -100,7 +104,7 @@ message(STATUS "Finding K4A SDK binaries")
 unset(k4a_DIR CACHE)
 
 # Force running the Findk4a.cmake module
-find_package(k4a 1.3.0 QUIET MODULE REQUIRED)
+find_package(k4a 1.4.1 REQUIRED MODULE REQUIRED)
 set(K4A_LIBS k4a::k4a;k4a::k4arecord)
 
 # Try to find and enable the body tracking SDK
@@ -239,6 +243,9 @@ target_link_libraries(${PROJECT_NAME}_nodelet
   ${catkin_LIBRARIES}
   ${OpenCV_LIBS}
 )
+target_link_libraries(ball_detection ${K4A_LIBS} ${catkin_LIBRARIES})
+
+target_link_libraries(test_detect ${catkin_LIBRARIES} ball_detection )
 
 #############
 ## Install ##
