@@ -66,7 +66,7 @@ namespace ball_detection {
     std::deque<cv::Mat> img_buffer;
 
     // Global
-    roi_pair prev_ball_ROIs;
+    cv::Rect prev_ball_ROI;
     int candidate_debug = DEBUG_NONE; // For coloring the debug image on similar guess-candidates
     sensor_msgs::CameraInfoPtr info_msg_;
 
@@ -100,11 +100,9 @@ namespace ball_detection {
 
     roi_list findMovingCandidates(const cv::Mat& frame);
 
-    void searchCandidates(const cv::Mat& frame, roi_list& ROIs, roi_pair& ball_ROIs);
+    void searchCandidates(const cv::Mat& frame, roi_list& ROIs, cv::Rect ball_ROI);
 
-    void searchCandidates(const cv::Mat& frame, roi_list& ROIs, roi_pair& ball_ROIs);
-
-    void findCandidateCenter(const cv::Mat& frame, roi_pair& ball_ROIs, point_pair& center);
+    void findCandidateCenter(const cv::Mat& frame, cv::Rect ball_ROI, cv::Point2f center);
 
     void publishCenter(point_pair& centers, ros::Time& time_taken);
 

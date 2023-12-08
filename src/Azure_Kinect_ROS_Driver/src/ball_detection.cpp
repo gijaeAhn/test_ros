@@ -160,49 +160,41 @@ namespace ball_detection {
 
 
 
-        void searchClosestCandidates(const cv::Mat& frame, roi_list& ROIs, roi_pair& ball_ROIs) {
+        void searchClosestCandidates(const cv::Mat& frame, roi_list& ROIs, cv::Rect ball_ROI) {
             // If previous ball is empty then leave
-            if (prev_ball_ROIs.first.empty() || prev_ball_ROIs.second.empty()) { return; }
+            if (prev_ball_ROI.empty()) { return; }
 
             // Just double-checking
             auto start = ros::Time::now();
 
-            auto left_prev_center = (prev_ball_ROIs.first.br() + prev_ball_ROIs.first.tl()) * 0.5;
-            auto right_prev_center = (prev_ball_ROIs.second.br() + prev_ball_ROIs.second.tl()) * 0.5;
-            cv::Rect left_closest, right_closest;
-            int left_min = INT_MAX, right_min = INT_MAX;
+            auto prev_center = prev_ball_ROI.br() + prev_ball_ROI.tl()*0.5;
+            cv::Rect closest;
+            int center_min = INT_MAX;
 
             for (const auto& roi: ROIs) {
                 auto roi_center = (roi.br() + roi.tl()) * 0.5;
-                double left_dist = cv::norm(left_prev_center - roi_center);
-                double right_dist = cv::norm(right_prev_center - roi_center);
+                double dist = cv::norm(prev_center - roi_center);
 
-                if (roi.br().x < frame.cols / 2 && left_dist < left_min) {
-                    left_min = left_dist;
-                    left_closest = roi;
-                } else if (roi.tl().x > frame.cols / 2 && right_dist < right_min) {
-                    right_min = right_dist;
-                    right_closest = roi;
-                }
+                if (roi.br().x < frame.cols / 2 && dist < center_min) {
+                    center_min = dist;
+                    closest = roi;
             }
-            if (left_closest.empty() || right_closest.empty()) { return; }
+            if (closest.empty()) { return; }
 
             // Idk why this is faster than doing individually
             // Copying is much faster than performing other CV functions so just add to one image
-            cv::Rect left_mask(0,0,left_closest.width, left_closest.height);
-            cv::Rect right_mask(left_closest.width,0,right_closest.width, right_closest.height);
+            cv::Rect mask(0,0,closest.width, closest.height);
 
-            cv::Mat combined(std::max(left_closest.height, right_closest.height), left_closest.width + right_closest.width, frame.type());
-            frame(left_closest).copyTo(combined(left_mask));               // Cheap
-            frame(right_closest).copyTo(combined(right_mask));             // Cheap
+            // Should be broader
+            cv::Mat broad(closest.height, closest.width , frame.type());
+            frame(closest).copyTo(broad(mask));               // Cheap
 
-            cv::cvtColor(combined, combined, cv::COLOR_BGR2HSV, 0);  // Very Expensive
-            cv::inRange(combined, low_HSV_, high_HSV_, combined);    // Very Expensive
-            int left_detect = cv::countNonZero(combined(left_mask));
-            int right_detect = cv::countNonZero(combined(right_mask));
+            cv::cvtColor(broad, broad, cv::COLOR_BGR2HSV, 0);  // Very Expensive
+            cv::inRange(broad, low_HSV_, high_HSV_, broad);    // Very Expensive
+            int detect = cv::countNonZero(broad(mask));
 
 
-            // Evulate the guesses for left and right
+            // Evaluate the guess
             auto evaluate_guess = [&](cv::Rect& prev_roi, cv::Rect& closest_roi, cv::Rect& ball_roi, int detection) {
                 if (detection > 0) {             // If have color then go for it
                     ball_roi = closest_roi;
@@ -223,12 +215,11 @@ namespace ball_detection {
                     }
                 }
             };
-            evaluate_guess(prev_ball_ROIs.second, right_closest, ball_ROIs.second, right_detect);
-            evaluate_guess(prev_ball_ROIs.first, left_closest, ball_ROIs.first, left_detect);   // Left has to be second for debug
+            evaluate_guess(prev_ball_ROI, closest, ball_ROI, detect);
 
             if (print_diagnostics_)
                 ROS_INFO_STREAM_THROTTLE(0.5,"Evaluate Closest Candidate: " << (ros::Time::now() - start).toSec() << " sec. "
-                                                                            << "Success: " << (!ball_ROIs.first.empty() && !ball_ROIs.second.empty()) );
+                                                                            << "Success: " << (!ball_ROI.empty()) );
         }
 
         void searchCandidates(const cv::Mat& frame, roi_list& ROIs, roi_pair& ball_ROIs) {
@@ -330,11 +321,11 @@ namespace ball_detection {
                     cv::Rect right_mask(left_roi.width,0,right_roi.width, right_roi.height);
 
                     // Could use the one from evalution but oh well, maybe in the future
-                    cv::Mat combined(std::max(left_roi.height, right_roi.height), left_roi.width + right_roi.width, frame.type());
-                    frame(left_roi).copyTo(combined(left_mask));               // Cheap
-                    frame(right_roi).copyTo(combined(right_mask));             // Cheap
-                    cv::cvtColor(combined, combined, cv::COLOR_BGR2HSV, 0);  // Very Expensive
-                    cv::inRange(combined, low_HSV_, high_HSV_, combined);    // Very Expensive
+                    cv::Mat broad(std::max(left_roi.height, right_roi.height), left_roi.width + right_roi.width, frame.type());
+                    frame(left_roi).copyTo(broad(left_mask));               // Cheap
+                    frame(right_roi).copyTo(broad(right_mask));             // Cheap
+                    cv::cvtColor(broad, broad, cv::COLOR_BGR2HSV, 0);  // Very Expensive
+                    cv::inRange(broad, low_HSV_, high_HSV_, broad);    // Very Expensive
 
                     auto calc_center = [&](const cv::Mat& img, cv::Point2f parent_tl, cv::Point2f& center, cv::Rect& ball_roi) {
                         std::vector<std::vector<cv::Point>> contours;
@@ -353,8 +344,8 @@ namespace ball_detection {
                             center = cv::Point2f(m.m10 / m.m00, m.m01 / m.m00) + parent_tl;
                         }
                     };
-                    calc_center(combined(left_mask), left_roi.tl(), center.first, left_roi);
-                    calc_center(combined(right_mask), right_roi.tl(), center.second, right_roi);
+                    calc_center(broad(left_mask), left_roi.tl(), center.first, left_roi);
+                    calc_center(broad(right_mask), right_roi.tl(), center.second, right_roi);
                 }
 
                 if (print_diagnostics_)

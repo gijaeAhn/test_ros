@@ -64,9 +64,9 @@ add_executable(${PROJECT_NAME}_node
   )
 
 add_executable(test_bridge src/test_bridge.cpp)
-add_executable(ball_detection src/ball_detection.cpp)
+#add_executable(ball_detection src/ball_detection.cpp)
 target_link_libraries(test_bridge ${catkin_LIBRARIES})
-target_link_libraries(ball_detection ${catkin_LIBRARIES})
+#target_link_libraries(ball_detection ${catkin_LIBRARIES})
 target_compile_features(${PROJECT_NAME}_node PUBLIC cxx_std_11)
 
 add_library(${PROJECT_NAME}_nodelet
