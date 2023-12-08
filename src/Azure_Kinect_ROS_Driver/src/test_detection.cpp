@@ -111,19 +111,14 @@ int main(int argc, char** argv){
     while(ros::ok()){
         //Capture Image and Keeping
         auto detect_start = ros::Time::now();
-        std::cout<< "Debug1.1" << std::endl;
         k4a::image RGBIMAGE =k4a_capture_.get_color_image();
-        std::cout<< "Debug1.2" << std::endl;
         k4a::image DEPTHIMAGE = k4a_capture_.get_depth_image();
-        std::cout<< "Debug1.3" << std::endl;
         cv::Mat RGBmat = k2cvMat(RGBIMAGE);
-        std::cout<< "Debug1.4" << std::endl;
         rgb_buffer_bookkeeping(RGBIMAGE);
         depth_buffer_bookkeeping(DEPTHIMAGE);
         cv_buffer_bookkeeping(RGBmat);
-        std::cout<< "Debug1.5" << std::endl;
         detectBall(1);
-        std::cout<< "Debug1.6" << std::endl;
+
         auto detect_end = ros::Time::now();
 
         if (print_diagnostics_) {

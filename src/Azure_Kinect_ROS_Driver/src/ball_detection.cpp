@@ -151,14 +151,22 @@ void signalHandler( int signum ) {
 
     //Segmentation fault error
     roi_list findMovingCandidates(const cv::Mat& frame){
+        printf("frame size : %d, %d", frame.cols,frame.rows);
+        if(frame.empty()){
+            printf("Empty frame");
+        }
+        printf("Background resize :  %f", background_resize_);
         auto start_time = ros::Time::now();
-        static cv::Mat moving_small;
+        cv::Mat moving_small;
+        printf("moving small size : %d, %d", moving_small.cols,moving_small.rows);
+
 
         cv::resize(frame,moving_small,cv::Size(), background_resize_,background_resize_,cv::INTER_AREA);
+        std::cout<< "Debug2.1" << std::endl;
         pBackSub_->apply(moving_small,moving_small,-1);
+        std::cout<< "Debug2.2" << std::endl;
         Contours contourlist;
         cv::findContours(moving_small, contourlist,cv::RETR_LIST,cv::CHAIN_APPROX_SIMPLE);
-
         std::deque<cv::Rect> ROIs;
         cv::Rect frame_roi(0,0,frame.cols,frame.rows);
         for(const auto contour : contourlist) {
@@ -177,6 +185,7 @@ void signalHandler( int signum ) {
 
             ROIs.push_back(roi);
             }
+        std::cout<< "Debug2.3" << std::endl;
 
             // Merge all ROI that overlap
             bool overlap = ROIs.size() > 1;
@@ -557,7 +566,8 @@ void signalHandler( int signum ) {
 
                 std::cout<< "Debug1" << std::endl;
                 k4a::image k4a_rgb_frame = k4a_rgb_buffer.back();
-                cv::Mat frame = k2cvMat(k4a_rgb_frame);
+                cv::Mat frame = img_buffer.back();
+                printf("Frame size : %d , %d\n", frame.cols, frame.rows);
                 std::cout<< "Debug2" << std::endl;
                 k4a::image k4a_depth_image = k4a_depth_buffer.back();
                 uint64_t buf_time = k4a_rgb_frame.get_system_timestamp().count();
@@ -571,11 +581,13 @@ void signalHandler( int signum ) {
 
                 std::cout<< "Debug4" << std::endl;
 
+                printf("Frame size : %d , %d\n", frame.cols, frame.rows);
                 // Get moving ROI candidates in shrunk image
                 cv::Rect ball_ROI;
+                std::cout<< "Debug5" << std::endl;
+
                 roi_list ROIs = findMovingCandidates(frame); // Blocking
 
-                std::cout<< "Debug5" << std::endl;
 
                 // If have previous ball, find closest candidate and check if colored or very similar to previous (fast heuristic)
                 searchClosestCandidates(frame, ROIs, ball_ROI); // Blocking
