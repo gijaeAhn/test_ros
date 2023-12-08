@@ -1,0 +1,8 @@
+prefix=/usr/local
+
+Name: realsense_test
+Description: Description of realsense_test
+Version: 0.1.0
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: roscpp std_msgs tf sensor_msgs
