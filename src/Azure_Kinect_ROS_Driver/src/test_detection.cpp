@@ -9,11 +9,12 @@ int main(int argc, char** argv){
     ros::NodeHandle nh;
     ros::NodeHandle nhp("~");
 
+    const int32_t TIMEOUT_IN_MS = 1000;
     k4a_device_configuration_t camera_config = K4A_DEVICE_CONFIG_INIT_DISABLE_ALL;
-    camera_config.color_format = K4A_IMAGE_FORMAT_COLOR_MJPG;
-    camera_config.color_resolution = K4A_COLOR_RESOLUTION_2160P;
-    camera_config.depth_mode = K4A_DEPTH_MODE_NFOV_UNBINNED; // No need for depth during calibration
-    camera_config.camera_fps = K4A_FRAMES_PER_SECOND_30;     // Don't use all USB bandwidth
+    camera_config.color_format = K4A_IMAGE_FORMAT_COLOR_BGRA32;
+    camera_config.color_resolution = K4A_COLOR_RESOLUTION_720P;
+    camera_config.depth_mode = K4A_DEPTH_MODE_WFOV_UNBINNED; // No need for depth during calibration
+    camera_config.camera_fps = K4A_FRAMES_PER_SECOND_15;     // Don't use all USB bandwidth
     camera_config.synchronized_images_only = true;
 //    camera_config.subordinate_delay_off_master_usec = 0;     // Must be zero for master
 //    camera_config.synchronized_images_only = true;
@@ -28,34 +29,31 @@ int main(int argc, char** argv){
         return 0;
     }
 
-    k4a::device k4a_device_;
-    k4a::capture k4a_capture_;
-    auto device = k4a_device_.open(K4A_DEVICE_DEFAULT);
-    device.start_cameras(&camera_config);
-    device.get_capture(&k4a_capture_);
+    k4a_device_t device = NULL;
+    k4a_capture_t capture = NULL;
 
-//    auto device = k4a_device_.handle();
+    if (K4A_RESULT_SUCCEEDED != k4a_device_open(K4A_DEVICE_DEFAULT, &device))
+    {
+        printf("Failed to open device\n");
+        return 0;
+    }
 
-//    if (K4A_RESULT_SUCCEEDED != k4a_device_open(K4A_DEVICE_DEFAULT, &device))
-//    {
-//        printf("Failed to open device\n");
-//    }
+    if (K4A_RESULT_SUCCEEDED != k4a_device_start_cameras(device,&camera_config))
+    {
+        ROS_INFO_STREAM("FAILED TO START CAMERAS");
+        return 0;
+    }
 
 
-//    if (K4A_RESULT_SUCCEEDED != k4a_device_start_cameras(device,&camera_config))
-//    {
-//        ROS_INFO_STREAM("FAILED TO START CAMERAS");
-//        return 0;
-//    }
     ROS_INFO_STREAM("STARTING CAMERAS");
 
     nhp.getParam("camera_id", camera_id_);
-    nhp.param("low_H", low_HSV_[0], 10.0);
-    nhp.param("low_S", low_HSV_[1], 170.0);
-    nhp.param("low_V", low_HSV_[2], 170.0);
-    nhp.param("high_H", high_HSV_[0], 35.0);
-    nhp.param("high_S", high_HSV_[1], 255.0);
-    nhp.param("high_V", high_HSV_[2], 255.0);
+    nhp.param("low_H", low_HSV_[0], 15.0);
+    nhp.param("low_S", low_HSV_[1], 20.0);
+    nhp.param("low_V", low_HSV_[2], 80.0);
+    nhp.param("high_H", high_HSV_[0], 50.0);
+    nhp.param("high_S", high_HSV_[1], 45.0);
+    nhp.param("high_V", high_HSV_[2], 100.0);
     nhp.param("print_diagnostics", print_diagnostics_, true);
     nhp.param("z_k2", z_k2, 0.002);
     nhp.param("z_k1", z_k1, 0.001);
@@ -77,8 +75,9 @@ int main(int argc, char** argv){
     nhp.param("debug_publish_period", debug_publish_period_, 0.01);
 
 
+    k4a_calibration_t cali;
+    k4a_device_get_calibration(device,camera_config.depth_mode,camera_config.color_resolution,&cali);
 
-    k4a::calibration cali = device.get_calibration(camera_config.depth_mode,camera_config.color_resolution);
 
     auto rgb_cali = cali.color_camera_calibration;
 
@@ -86,18 +85,21 @@ int main(int argc, char** argv){
     cx = rgb_cali.intrinsics.parameters.param.cx;
     fy = rgb_cali.intrinsics.parameters.param.fy;
     cy = rgb_cali.intrinsics.parameters.param.cy;
+    printf( "fx ,cx ,fy cy %f %f %f %f", fx,cx,fy, cy);
 
 
     info_msg_.reset(new sensor_msgs::CameraInfo());
     fillCamInfo(cali);
 
     pose_pub_ = nhp.advertise<geometry_msgs::PoseWithCovarianceStamped>("/ball_" + camera_id_ + "_pose", 1);
+
     image_transport::ImageTransport it(nhp);
     debug_pub_ = it.advertiseCamera("debug_img", 1);
+    debug_thresh_pub_ = it.advertiseCamera("debug_thresh_img",1);
     ROS_INFO_STREAM("Advertised on topic " << debug_pub_.getTopic());
     ROS_INFO_STREAM("Advertised on topic " << debug_pub_.getInfoTopic());
 
-    pBackSub_ = cv::createBackgroundSubtractorMOG2(100, 50, false);
+    pBackSub_ = cv::createBackgroundSubtractorMOG2(100, 30, false);
 
 
     covariance = std::vector<double>(36, 0.0);
@@ -105,19 +107,36 @@ int main(int argc, char** argv){
     ros::Time prev_loop_time = ros::Time::now();
 
     std::signal(SIGINT, signalHandler); // Free memory so don't get error
-    std::thread thd;
-    int i = 0;
+
+    std::chrono::milliseconds i(1000);
 
     while(ros::ok()){
         //Capture Image and Keeping
         auto detect_start = ros::Time::now();
-        k4a::image RGBIMAGE =k4a_capture_.get_color_image();
-        k4a::image DEPTHIMAGE = k4a_capture_.get_depth_image();
+        k4a_image_t image;
+        switch (k4a_device_get_capture(device, &capture, TIMEOUT_IN_MS))
+        {
+            case K4A_WAIT_RESULT_SUCCEEDED:
+                break;
+            case K4A_WAIT_RESULT_TIMEOUT:
+                printf("Timed out waiting for a capture\n");
+                continue;
+                break;
+            case K4A_WAIT_RESULT_FAILED:
+                printf("Failed to read a capture\n");
+                return 0;
+        }
+
+        k4a_image_t RGBIMAGE = k4a_capture_get_color_image(capture);
+        k4a_image_t DEPTHIMAGE = k4a_capture_get_depth_image(capture);
+        printf("Detph Size : %d %d", k4a_image_get_height_pixels(DEPTHIMAGE), k4a_image_get_width_pixels(DEPTHIMAGE));
+        printf("RGB Size : %d %d", k4a_image_get_height_pixels(RGBIMAGE), k4a_image_get_width_pixels(RGBIMAGE));
         cv::Mat RGBmat = k2cvMat(RGBIMAGE);
         rgb_buffer_bookkeeping(RGBIMAGE);
         depth_buffer_bookkeeping(DEPTHIMAGE);
         cv_buffer_bookkeeping(RGBmat);
-        detectBall(1);
+        detectBall();
+
 
         auto detect_end = ros::Time::now();
 
@@ -131,7 +150,7 @@ int main(int argc, char** argv){
 
     }
 
-    k4a_device_.close();
+    k4a_device_close(device);
     return EXIT_SUCCESS;
 
 

@@ -59,13 +59,14 @@ typedef std::vector<Contour> Contours;
     bool is_merged_;
     double merged_percent_;
     double debug_publish_period_;
+    bool resize_frame;
 
     //BUFFER
 
     int max_history = 20;
-    std::deque<k4a::image> k4a_rgb_buffer(max_history);
-    std::deque<k4a::image> k4a_depth_buffer(max_history);
-    std::deque<cv::Mat> img_buffer;
+    std::deque<k4a_image_t > k4a_rgb_buffer(max_history);
+    std::deque<k4a_image_t > k4a_depth_buffer(max_history);
+    std::deque<cv::Mat> cv_buffer;
 
     // Global
     cv::Rect prev_ball_ROI;
@@ -73,29 +74,30 @@ typedef std::vector<Contour> Contours;
     sensor_msgs::CameraInfoPtr info_msg_;
 
 // Constant
-    static double fx, fy, cx, cy, base_line;
-    cv::Ptr<cv::BackgroundSubtractorMOG2> pBackSub_, pBackSub_left_, pBackSub_right_;
+    double fx, fy, cx, cy, base_line;
+    cv::Ptr<cv::BackgroundSubtractorMOG2> pBackSub_;
     std::vector<double> covariance;
 
 // Publisher / Subsciber
     ros::Publisher pose_pub_;
     image_transport::CameraPublisher debug_pub_;
+    image_transport::CameraPublisher debug_thresh_pub_;
 
 ///////////////////////////////////////////////////////////////////////
 
 
 
-    cv::Mat k2cvMat(const k4a::image& input);
+    cv::Mat k2cvMat(const k4a_image_t& input);
 
-    ros::Time kTime2Ros(uint64_t time);
+    ros::Time kTime2Ros(const uint64_t & time);
 
-    void fillCamInfo(k4a::calibration);
+    void fillCamInfo(k4a_calibration_t& cali);
 
     double getDepth(int x, int y);
 
 
 
-    geometry_msgs::Point getCartesianCoord(int x,int y,uint8_t depth);
+    geometry_msgs::Point getCartesianCoord(int x,int y,uint16_t depth);
 
     geometry_msgs::PoseWithCovarianceStamped createEstimateMsg(const geometry_msgs::Point& position, const ros::Time& time_taken);
 
@@ -103,9 +105,9 @@ typedef std::vector<Contour> Contours;
 
     void cv_buffer_bookkeeping(const cv::Mat& frame);
 
-    void rgb_buffer_bookkeeping(const k4a::image& frame);
+    void rgb_buffer_bookkeeping(const k4a_image_t& frame);
 
-    void depth_buffer_bookkeeping(const k4a::image& frame);
+    void depth_buffer_bookkeeping(const k4a_image_t& frame);
 
     geometry_msgs::PoseWithCovarianceStamped createEstimateMsg(const geometry_msgs::Point& position , ros::Time& taken_time);
 
@@ -116,11 +118,11 @@ typedef std::vector<Contour> Contours;
 
     void findCandidateCenter(const cv::Mat& frame, cv::Rect& ball_ROI, cv::Point2i& center);
 
-    void publishCenter(cv::Point2i& center, ros::Time& time_taken, k4a::image& depth_image);
+    void publishCenter(cv::Point2i& center, ros::Time& time_taken, k4a_image_t& depth_image);
 
     void publishDebug(const cv::Mat& frame,roi_list& ROIs, cv::Rect& ball_ROI, cv::Point2i center, ros::Time time);
 
-    void detectBall(int image_idx);
+    void detectBall();
 
     k4a_result_t getDepthImage(const k4a::capture& capture, k4a::image& return_depth_image);
 
