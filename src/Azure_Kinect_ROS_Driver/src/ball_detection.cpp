@@ -8,6 +8,7 @@
 
 
 cv::Mat moving_small;
+cv::Mat mask;
 
 void signalHandler( int signum ) {
     std::cout << "Interrupt signal (" << signum << ") received.\n";
@@ -109,7 +110,6 @@ void signalHandler( int signum ) {
             geometry_msgs::Point point;
             if(depth > 0)
             {
-                printf(" fx fy %f %f cx cy %f %f", fx,fy,cx,cy);
                 point.y = depth_in_real*(x-cx)/fx;
                 point.z = depth_in_real*(y-cy)/fy;
                 point.x = depth_in_real;
@@ -149,26 +149,17 @@ void signalHandler( int signum ) {
     //Segmentation fault error
     roi_list findMovingCandidates(const cv::Mat& frame) {
         auto start_time = ros::Time::now();
-
-
-
-        //Resizing Frame
-        if(resize_frame){
-            cv::resize(frame,moving_small,cv::Size(), background_resize_,background_resize_,cv::INTER_AREA);
-            if (!moving_small.empty()) {
-                pBackSub_->apply(moving_small, moving_small, -1);
-            }
-        }
-        else{
-            pBackSub_->apply(frame,moving_small,-1);
-        }
-
-        debug_thresh_pub_.publish(cv_bridge::CvImage(info_msg_->header, "mono8", moving_small).toImageMsg(), info_msg_);
-//        cv::cvtColor(moving_small,moving_small,cv::COLOR_BGR2GRAY);
+        cv::cvtColor(frame,moving_small,cv::COLOR_BGR2HSV);
+        cv::cvtColor(moving_small,moving_small,cv::COLOR_HSV2BGR);
+        cv::cvtColor(moving_small,moving_small,cv::COLOR_BGR2GRAY);
+        cv::inRange(moving_small,low_HSV_,high_HSV_,mask);
+        cv::Mat result;
+        cv::bitwise_and(frame,frame,result,mask);
+        debug_thresh_pub_.publish(cv_bridge::CvImage(info_msg_->header, "mono8",mask).toImageMsg(), info_msg_);
         Contours contourlist;
-        if(moving_small.type() == CV_8UC1){
-            printf("Finding Contours Debug1\n");
-            cv::findContours(moving_small, contourlist,cv::RETR_LIST,cv::CHAIN_APPROX_SIMPLE);
+        if(mask.type() == CV_8UC1){
+            printf("Find Contour\n");
+            cv::findContours(mask, contourlist,cv::RETR_LIST,cv::CHAIN_APPROX_SIMPLE);
         }
         std::deque<cv::Rect> ROIs;
         cv::Rect frame_roi(0,0,frame.cols,frame.rows);
@@ -179,7 +170,7 @@ void signalHandler( int signum ) {
             auto area = cv::contourArea(contour);
 
             // Area size depends on location of camera
-            if (area <=  5000 || 30000< area) continue;
+            if (area <=  3000 || 20000< area) continue;
             cv::Rect roi_small = cv::boundingRect(contour);
             //Modify depend on resizing
             background_resize_= 1.0;
@@ -386,13 +377,12 @@ void signalHandler( int signum ) {
                     // Get center for image
                     auto calc_center = [&](const cv::Mat& img, cv::Point2f parent_tl, cv::Point2i& center, cv::Rect& ball_roi) {
                         std::vector<std::vector<cv::Point>> contours;
-                        printf("Finding Contours Debug2\n");
                         cv::findContours(img, contours, cv::RETR_LIST, cv::CHAIN_APPROX_SIMPLE);
                         std::vector<cv::Point> max_contour;
                         double max_area = INT_MIN;
                         for (const auto& contour : contours) {
                             double area = cv::contourArea(contour);
-                            if(area < 35000 && area > 15000)
+                            if(area < 20000 && area > 3000)
                             if (max_area < area) {
                                 max_area = area;
                                 max_contour = contour;
@@ -404,7 +394,7 @@ void signalHandler( int signum ) {
                             printf(" X Y   %d %d \n", center.x, center.y);
                         }
                     };
-                    calc_center(moving_small, ball_ROI.tl(), center,ball_ROI);
+                    calc_center(mask, ball_ROI.tl(), center,ball_ROI);
                 if (print_diagnostics_)
                     ROS_INFO_STREAM_THROTTLE(0.5,"Find Center: " << (ros::Time::now() - start).toSec() << " sec");
             }
@@ -428,7 +418,7 @@ void signalHandler( int signum ) {
                 double dist = sqrt(pow(position.x-prev_position.x,2)+pow(position.y-prev_position.y,2)+pow(position.z-prev_position.z,2));
 //              if (dist < INT_MAX) {
                 auto pose_msg = createEstimateMsg(position, time_taken);
-                printf(" X : %f  Y :%f Z : %f ",position.x,position.y,position.z);
+                printf(" X : %f  Y :%f Z : %f \n",position.x,position.y,position.z);
                 pose_pub_.publish(pose_msg);
 //              }
                 last_position_time = ros::Time::now();
@@ -436,7 +426,6 @@ void signalHandler( int signum ) {
             }
 
             void publishDebug(const cv::Mat& frame, roi_list& ROIs, cv::Rect& ball_ROI, cv::Point2i buf_center, ros::Time time) {
-                printf("Publishing Debug Image");
                 // Only publish at fixed rate
                 ros::Time last_publish_time = ros::Time::now();
 //                if (ros::Time::now() - last_publish_time < ros::Duration(debug_publish_period_)) {
@@ -471,7 +460,6 @@ void signalHandler( int signum ) {
                     cv::Point2i center = buf_center;
 
                     if (center != cv::Point2i() && roi.contains(center)) {
-                        printf("Draw Center\n");
                         int size = 7;
                         cv::Rect center_roi(center - cv::Point2i((size-1)/2, (size-1)/2), cv::Size(size,size));
                         cv::Scalar color = is_merged_ ? cv::Scalar(255, 50, 255) : cv::Scalar(255, 50, 50);

@@ -48,12 +48,12 @@ int main(int argc, char** argv){
     ROS_INFO_STREAM("STARTING CAMERAS");
 
     nhp.getParam("camera_id", camera_id_);
-    nhp.param("low_H", low_HSV_[0], 15.0);
-    nhp.param("low_S", low_HSV_[1], 20.0);
-    nhp.param("low_V", low_HSV_[2], 80.0);
-    nhp.param("high_H", high_HSV_[0], 50.0);
-    nhp.param("high_S", high_HSV_[1], 45.0);
-    nhp.param("high_V", high_HSV_[2], 100.0);
+    nhp.param("low_H", low_HSV_[0], 0.0);
+    nhp.param("low_S", low_HSV_[1], 0.0);
+    nhp.param("low_V", low_HSV_[2], 200.0);
+    nhp.param("high_H", high_HSV_[0], 180.0);
+    nhp.param("high_S", high_HSV_[1], 50.0);
+    nhp.param("high_V", high_HSV_[2], 255.0);
     nhp.param("print_diagnostics", print_diagnostics_, true);
     nhp.param("z_k2", z_k2, 0.002);
     nhp.param("z_k1", z_k1, 0.001);
